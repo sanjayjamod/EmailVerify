@@ -8,9 +8,11 @@
   "http_timeout": 30,
   "transient": [
     "Timeout",
-    "Mx Error",
-    "SPAM Block"
+    "MX Error",
+    "SPAM Block",
+    "Greylisted"
   ],
   "retry_delay": 300,
-  "cooldown": 20
+  "cooldown": 20,
+  "key_cooldown": 300
 }

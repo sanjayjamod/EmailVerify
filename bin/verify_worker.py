@@ -15,8 +15,9 @@ Design notes
     limit no matter how many requests are in flight.
   * Work is claimed in batches and parked for 15 minutes, so a crash or a
     reboot loses nothing - the rows simply become claimable again.
-  * Every answer is written to the cache table, so the same address is never
-    paid for twice.
+  * Every final answer is written to the cache table, so the same address is
+    never paid for twice. Answers worth asking again (Timeout, SPAM Block,
+    MX Error, Greylisted) and key errors are never cached.
   * A daily cap stops a runaway loop from burning the whole balance overnight.
 """
 import json, os, signal, sys, threading, time
@@ -39,9 +40,10 @@ DEFAULTS = {
     "daily_cap": 90000,      # hard stop per calendar day
     "max_attempts": 3,
     "http_timeout": 30,
-    "transient": ["Timeout", "Mx Error", "SPAM Block"],
+    "transient": list(store.TRANSIENT),
     "retry_delay": 300,
     "cooldown": 20,          # seconds every thread waits after a 429
+    "key_cooldown": 300,     # ... and after the API refuses the key
 }
 
 stop = threading.Event()
@@ -138,7 +140,9 @@ def check(session, key, email, timeout):
 def worker(name, conf, key, bucket, counter):
     session = requests.Session()
     con = store.connect()
-    transient = set(conf["transient"])
+    # Without case: the API sends "MX Error", the docs (and old configs) say
+    # "Mx Error", and an exact match never retried a single one of them.
+    transient = {m.lower() for m in conf["transient"]}
 
     while not stop.is_set():
         # daily cap
@@ -173,10 +177,28 @@ def worker(name, conf, key, bucket, counter):
             continue
 
         code, message = result
+
+        if code not in store.VERDICTS:
+            if code == "--" or "key" in message.lower():
+                # Disabled Key / Invalid Key. Saved as a result it would sit in
+                # the cache for good, and a dead key would stamp it on every
+                # address in the queue - so put it back and stand everyone down.
+                store.release(con, row_id)
+                con.commit()
+                bucket.penalise(conf.get("key_cooldown", 300))
+                log("%s  API refused the key (%s) - all threads standing down"
+                    % (name, message or code))
+            else:
+                log("%s  %s  RETRY  unexpected answer %r / %r" % (name, email, code, message))
+                store.defer(con, row_id, conf["retry_delay"], conf["max_attempts"])
+                con.commit()
+            continue
+
         store.bump_usage(con)
 
-        if message in transient:
-            store.defer(con, row_id, conf["retry_delay"], conf["max_attempts"])
+        if message.lower() in transient:
+            store.defer(con, row_id, conf["retry_delay"], conf["max_attempts"],
+                        code, message)
             con.commit()
             continue
 

@@ -87,9 +87,15 @@ upload_file = f"{up}/{name} ({len(rows)} accepted).csv"
 with open(upload_file, "w", newline="", encoding="utf-8-sig") as fh:
     w = csv.DictWriter(fh, fieldnames=COLS); w.writeheader(); w.writerows(rows)
 
+# No final verdict yet: the API timed out, was blocked, hit a greylist or an MX
+# it could not reach, or never answered at all (blank - a failed row). About a
+# third of these come good on a later run, most of them as Accepted.
+RETRY = ("", "timeout", "mx error", "spam block", "greylisted",
+         "disabled key", "invalid key")
+
 buckets = collections.defaultdict(list)
 for e, (code, st) in other.items():
-    if "Too Many Requests" in st or st == "Disabled Key": buckets["needs re-verify"].append((e, st[:60]))
+    if st.lower() in RETRY or "Too Many Requests" in st: buckets["needs re-verify"].append((e, st[:60] or "(no answer)"))
     elif code == "ko": buckets["bad - do not send"].append((e, st))
     else: buckets["unknown - risky"].append((e, st or "(blank)"))
 bucket_counts = {}
@@ -159,8 +165,9 @@ Named rows are sorted to the top.
 """)
     for b, n in sorted(bucket_counts.items()): fh.write(f"- `{b}` — {n:,}\n")
     fh.write("""
-`bad` is permanently dead. `unknown - risky` is catch-all and spam-block — only in
-small watched batches. `needs re-verify` never got a verdict; run those again.
+`bad` is permanently dead. `unknown - risky` is catch-all — only in small watched
+batches. `needs re-verify` never got a final verdict (timeout, spam block, MX
+error, greylisted, no answer); run those again.
 
 ## Columns
 

@@ -16,6 +16,14 @@ import os, sqlite3, time, datetime
 BASE = os.environ.get("EMAILS_BASE", "/opt/emails")
 DB = BASE + "/verify.db"
 
+# The only codes that are a verdict on the address. Anything else - "--" with
+# Disabled Key / Invalid Key - is the API talking about our key.
+VERDICTS = ("ok", "ko", "mb")
+
+# Answers worth asking again later rather than keeping. Compared without case:
+# the API docs spell it "Mx Error" but the API itself sends "MX Error".
+TRANSIENT = ("Timeout", "MX Error", "SPAM Block", "Greylisted")
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS jobs (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -118,8 +126,8 @@ def job_counts(con, job_id):
         " SUM(state='pending') pending,"
         " SUM(state='done') done,"
         " SUM(state='failed') failed,"
-        " SUM(code='ok' AND message='Accepted') accepted,"
-        " SUM(code='ko') rejected,"
+        " SUM(state='done' AND code='ok' AND message='Accepted') accepted,"
+        " SUM(state='done' AND code='ko') rejected,"
         " SUM(state='done' AND code!='ko'"
         "     AND NOT (code='ok' AND message='Accepted')) unknown"
         " FROM emails WHERE job_id=?",
@@ -183,23 +191,33 @@ def in_flight(con, job_id, n=5):
 
 def claim_batch(con, limit):
     """Hand back up to `limit` addresses that are ready to be checked.
-    Marks them so a second worker cannot pick up the same rows."""
-    now = time.time()
-    rows = con.execute(
-        "SELECT e.id, e.email FROM emails e"
-        " JOIN jobs j ON j.id = e.job_id"
-        " WHERE e.state='pending' AND e.next_try<=? AND j.status!='paused'"
-        " ORDER BY e.job_id, e.id LIMIT ?",
-        (now, limit),
-    ).fetchall()
-    if not rows:
-        return []
-    ids = [r["id"] for r in rows]
-    con.execute(
-        "UPDATE emails SET next_try=? WHERE id IN (%s)" % ",".join("?" * len(ids)),
-        [now + 900] + ids,          # parked for 15 min in case we die mid-flight
-    )
-    con.commit()
+    Marks them so a second worker cannot pick up the same rows.
+
+    The pick and the mark share one write transaction. Run apart, two threads
+    could both read a row before either marked it, and that address was
+    checked - and paid for - twice."""
+    if con.in_transaction:
+        con.commit()
+    con.execute("BEGIN IMMEDIATE")
+    try:
+        now = time.time()
+        rows = con.execute(
+            "SELECT e.id, e.email FROM emails e"
+            " JOIN jobs j ON j.id = e.job_id"
+            " WHERE e.state='pending' AND e.next_try<=? AND j.status!='paused'"
+            " ORDER BY e.job_id, e.id LIMIT ?",
+            (now, limit),
+        ).fetchall()
+        if rows:
+            ids = [r["id"] for r in rows]
+            con.execute(
+                "UPDATE emails SET next_try=? WHERE id IN (%s)" % ",".join("?" * len(ids)),
+                [now + 900] + ids,      # parked for 15 min in case we die mid-flight
+            )
+        con.commit()
+    except Exception:
+        con.rollback()
+        raise
     return [(r["id"], r["email"]) for r in rows]
 
 
@@ -218,14 +236,17 @@ def save_result(con, row_id, email, code, message):
     )
 
 
-def defer(con, row_id, delay, max_attempts):
-    """A transient failure. Push it back unless it has run out of tries."""
+def defer(con, row_id, delay, max_attempts, code=None, message=None):
+    """A transient failure. Push it back unless it has run out of tries.
+    The last answer (Timeout, SPAM Block ...) stays on the row, so one that
+    runs out of tries still says why. It never goes in the cache."""
     con.execute(
         "UPDATE emails SET attempts=attempts+1,"
+        " code = COALESCE(?, code), message = COALESCE(?, message),"
         " next_try = CASE WHEN attempts+1 >= ? THEN 0 ELSE ? END,"
         " state = CASE WHEN attempts+1 >= ? THEN 'failed' ELSE 'pending' END"
         " WHERE id=?",
-        (max_attempts, time.time() + delay, max_attempts, row_id),
+        (code, message, max_attempts, time.time() + delay, max_attempts, row_id),
     )
 
 

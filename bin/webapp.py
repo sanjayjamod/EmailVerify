@@ -149,12 +149,19 @@ def check_one():
         return jsonify(ok=False, error="API said (http %d): %s"
                                        % (r.status_code, r.text[:200]))
 
-    code, message = d.get("code", ""), d.get("message", "")
+    code, message = d.get("code", "") or "", d.get("message", "") or ""
+    if code not in store.VERDICTS:
+        return jsonify(ok=False, error="API said %s / %s - not a verdict, nothing saved"
+                                       % (code, message))
     store.bump_usage(con)
-    con.execute("INSERT INTO cache (email, code, message, checked_at) VALUES (?,?,?,?)"
-                " ON CONFLICT(email) DO UPDATE SET code=excluded.code,"
-                " message=excluded.message, checked_at=excluded.checked_at",
-                (email, code, message, store.now_iso()))
+    # Only final answers are cached. A Timeout or SPAM Block kept here would be
+    # handed back for that address on every later upload, never re-checked.
+    transient = {m.lower() for m in conf().get("transient", store.TRANSIENT)}
+    if message.lower() not in transient:
+        con.execute("INSERT INTO cache (email, code, message, checked_at) VALUES (?,?,?,?)"
+                    " ON CONFLICT(email) DO UPDATE SET code=excluded.code,"
+                    " message=excluded.message, checked_at=excluded.checked_at",
+                    (email, code, message, store.now_iso()))
     con.commit()
     return jsonify(ok=True, cached=False, email=email, code=code, message=message)
 
@@ -332,14 +339,15 @@ def retry_failed(job_id):
 
 @app.route("/job/<int:job_id>/download")
 def download(job_id):
-    """email,code,message - exactly the shape process_verify.py reads."""
+    """email,code,message - exactly the shape process_verify.py reads.
+    Failed rows are in it too, so none of the job goes missing."""
     con = store.connect()
     j = con.execute("SELECT name FROM jobs WHERE id=?", (job_id,)).fetchone()
     if not j:
         return "no such job", 404
     rows = con.execute(
-        "SELECT email, code, message FROM emails WHERE job_id=? AND state='done'"
-        " ORDER BY id", (job_id,)).fetchall()
+        "SELECT email, code, message FROM emails WHERE job_id=?"
+        " AND state IN ('done','failed') ORDER BY id", (job_id,)).fetchall()
     buf = io.StringIO()
     w = csv.writer(buf)
     for r in rows:
@@ -408,9 +416,11 @@ def process(job_id):
 
     con = store.connect()
     j = con.execute("SELECT name FROM jobs WHERE id=?", (job_id,)).fetchone()
+    # Failed rows go along too - process_verify.py files them under "needs
+    # re-verify". Left out, they vanished from every folder of the output.
     rows = con.execute(
-        "SELECT email, code, message FROM emails WHERE job_id=? AND state='done'"
-        " ORDER BY id", (job_id,)).fetchall()
+        "SELECT email, code, message FROM emails WHERE job_id=?"
+        " AND state IN ('done','failed') ORDER BY id", (job_id,)).fetchall()
     if not rows:
         flash("nothing verified yet")
         return redirect(url_for("job", job_id=job_id))
