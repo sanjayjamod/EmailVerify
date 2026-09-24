@@ -1,0 +1,16 @@
+{
+  "_comment": "Pro plan = 11 per 10s. Ultimate = 57 per 10s. Change rate_limit and daily_cap together, then: systemctl restart email-verify-worker",
+  "rate_limit": 11,
+  "rate_period": 10.0,
+  "workers": 3,
+  "daily_cap": 100000,
+  "max_attempts": 3,
+  "http_timeout": 30,
+  "transient": [
+    "Timeout",
+    "Mx Error",
+    "SPAM Block"
+  ],
+  "retry_delay": 300,
+  "cooldown": 20
+}
