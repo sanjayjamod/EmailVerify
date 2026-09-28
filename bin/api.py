@@ -12,17 +12,18 @@ A narrow HTTP endpoint so n8n can run the email pipeline without shell access.
 Binds to the Docker bridge only, so it is not reachable from the internet.
 Every request needs  X-Token: <token from /opt/emails/api.token>
 """
+
 import json, os, re, subprocess, sys
 from urllib.parse import urlparse, parse_qs
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 BASE   = "/opt/emails"
 PYBIN  = "/opt/tpl/venv/bin/python"
-TOKEN  = open(BASE + "/api.token").read().strip()
+TOKEN = open(f"{BASE}/api.token").read().strip()
 SAFE   = re.compile(r"^[A-Za-z0-9._ -]+$")      # no slashes, no traversal
 
 def run(cmd, timeout):
-    p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False)
     return p.returncode, p.stdout, p.stderr
 
 class Handler(BaseHTTPRequestHandler):
@@ -48,8 +49,12 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(200, {"ok": True})
         if not self.authed(): return
         if self.path == "/clients":
-            d = BASE + "/clients"
-            cl = sorted(x for x in os.listdir(d) if os.path.isdir(d + "/" + x)) if os.path.isdir(d) else []
+            d = f"{BASE}/clients"
+            cl = (
+                sorted(x for x in os.listdir(d) if os.path.isdir(f"{d}/{x}"))
+                if os.path.isdir(d)
+                else []
+            )
             out = []
             for c in cl:
                 db = f"{BASE}/clients/{c}/contacts.db"
@@ -64,11 +69,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply(400, {"ok": False, "error": "missing or unsafe client/job"})
             path = f"{BASE}/output/{client}/{job}/summary.json"
             if not os.path.isfile(path):
-                return self.reply(404, {"ok": False, "error": "no summary for %s/%s" % (client, job)})
+                return self.reply(
+                    404, {"ok": False, "error": f"no summary for {client}/{job}"}
+                )
             try:
                 return self.reply(200, {"ok": True, **json.load(open(path))})
             except Exception as e:
-                return self.reply(500, {"ok": False, "error": "unreadable summary: %s" % e})
+                return self.reply(500, {"ok": False, "error": f"unreadable summary: {e}"})
 
         self.reply(404, {"ok": False, "error": "unknown path"})
 
@@ -78,13 +85,13 @@ class Handler(BaseHTTPRequestHandler):
             n = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(n) or b"{}")
         except Exception as e:
-            return self.reply(400, {"ok": False, "error": "bad JSON: %s" % e})
+            return self.reply(400, {"ok": False, "error": f"bad JSON: {e}"})
 
         client = str(body.get("client", "")).strip()
         if not client or not SAFE.match(client):
             return self.reply(400, {"ok": False, "error": "missing or unsafe 'client'"})
         if not os.path.isdir(f"{BASE}/clients/{client}"):
-            return self.reply(404, {"ok": False, "error": "no such client: %s" % client})
+            return self.reply(404, {"ok": False, "error": f"no such client: {client}"})
 
         if self.path == "/process":
             fname = str(body.get("file", "")).strip()
@@ -92,7 +99,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply(400, {"ok": False, "error": "missing or unsafe 'file'"})
             path = f"{BASE}/inbox/{fname}"
             if not os.path.isfile(path):
-                return self.reply(404, {"ok": False, "error": "not in inbox: %s" % fname})
+                return self.reply(404, {"ok": False, "error": f"not in inbox: {fname}"})
             try:
                 rc, out, err = run([PYBIN, f"{BASE}/bin/process_verify.py", path, client], 900)
             except subprocess.TimeoutExpired:

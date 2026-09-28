@@ -14,6 +14,7 @@ and the password prompt.
     /job/<id>/mailwizz    the accepted-only CSV that MailWizz eats
     /job/<id>/mailwizz.zip  every folder process_verify.py wrote, zipped
 """
+
 import csv, datetime, io, os, re, json, subprocess, sys, zipfile
 from flask import (Flask, request, render_template, redirect, url_for,
                    jsonify, send_file, flash, Response)
@@ -22,15 +23,15 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import store
 
 BASE = os.environ.get("EMAILS_BASE", "/opt/emails")
-PYBIN = BASE + "/venv/bin/python"
-UPLOADS = BASE + "/uploads"
-RESULTS = BASE + "/results"
+PYBIN = f"{BASE}/venv/bin/python"
+UPLOADS = f"{BASE}/uploads"
+RESULTS = f"{BASE}/results"
 API = "https://happy.mailtester.ninja/ninja"
 
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
 SAFE = re.compile(r"^[A-Za-z0-9._ -]+$")
 
-app = Flask(__name__, template_folder=BASE + "/web/templates")
+app = Flask(__name__, template_folder=f"{BASE}/web/templates")
 app.secret_key = os.urandom(24)
 app.config["MAX_CONTENT_LENGTH"] = 512 * 1024 * 1024      # 512 MB uploads
 
@@ -63,14 +64,14 @@ def extract_emails(filename, raw):
 
 
 def clients():
-    d = BASE + "/clients"
+    d = f"{BASE}/clients"
     if not os.path.isdir(d):
         return []
-    return sorted(x for x in os.listdir(d) if os.path.isdir(d + "/" + x))
+    return sorted(x for x in os.listdir(d) if os.path.isdir(f"{d}/{x}"))
 
 
 def conf():
-    p = BASE + "/verify.conf.json"
+    p = f"{BASE}/verify.conf.json"
     try:
         return json.load(open(p))
     except Exception:
@@ -79,7 +80,7 @@ def conf():
 
 def api_key():
     """The real key, or '' while the file still holds the placeholder."""
-    p = BASE + "/mailtester.key"
+    p = f"{BASE}/mailtester.key"
     if not os.path.isfile(p):
         return ""
     k = open(p).read().strip()
@@ -124,8 +125,9 @@ def check_one():
         return jsonify(ok=False, error="that does not look like an email address")
 
     con = store.connect()
-    hit = con.execute("SELECT * FROM cache WHERE email=?", (email,)).fetchone()
-    if hit:
+    if hit := con.execute(
+        "SELECT * FROM cache WHERE email=?", (email,)
+    ).fetchone():
         return jsonify(ok=True, cached=True, email=email,
                        code=hit["code"], message=hit["message"],
                        checked_at=hit["checked_at"])
@@ -137,7 +139,7 @@ def check_one():
     try:
         r = requests.get(API, params={"email": email, "key": key}, timeout=30)
     except Exception as e:
-        return jsonify(ok=False, error="API call failed: %s" % e)
+        return jsonify(ok=False, error=f"API call failed: {e}")
 
     # Rate limiting comes back as plain text, not JSON.
     if r.status_code == 429:
@@ -151,8 +153,10 @@ def check_one():
 
     code, message = d.get("code", "") or "", d.get("message", "") or ""
     if code not in store.VERDICTS:
-        return jsonify(ok=False, error="API said %s / %s - not a verdict, nothing saved"
-                                       % (code, message))
+        return jsonify(
+            ok=False,
+            error=f"API said {code} / {message} - not a verdict, nothing saved",
+        )
     store.bump_usage(con)
     # Only final answers are cached. A Timeout or SPAM Block kept here would be
     # handed back for that address on every later upload, never re-checked.
@@ -180,7 +184,7 @@ def upload():
     raw = f.read()
     emails = extract_emails(f.filename, raw)
     if not emails:
-        flash("no email addresses found in %s" % f.filename)
+        flash(f"no email addresses found in {f.filename}")
         return redirect(url_for("index"))
 
     os.makedirs(UPLOADS, exist_ok=True)
@@ -204,7 +208,7 @@ def output_dir(client, name):
     """The MailWizz-ready folder for this job, or None if it was never made."""
     if not client or not SAFE.match(client):
         return None
-    d = "%s/output/%s/%s" % (BASE, client, job_stem(name))
+    d = f"{BASE}/output/{client}/{job_stem(name)}"
     return d if os.path.isdir(d) else None
 
 
@@ -248,12 +252,10 @@ def span_seconds(first, last):
 
 def measured_speed(timing, done):
     """Total elapsed for this job, and its overall average speed."""
-    if not (timing["first"] and timing["last"] and done > 1):
+    if not timing["first"] or not timing["last"] or done <= 1:
         return None, 0
     elapsed = span_seconds(timing["first"], timing["last"])
-    if elapsed <= 0:
-        return None, 0
-    return done / elapsed, int(elapsed)
+    return (None, 0) if elapsed <= 0 else (done / elapsed, int(elapsed))
 
 
 def live_speed(con, job_id):
@@ -354,8 +356,11 @@ def download(job_id):
         w.writerow([r["email"], r["code"], r["message"]])
     data = buf.getvalue().encode()
     fname = re.sub(r"\.(csv|xlsx|txt)$", "", j["name"], flags=re.I) + "-verified.csv"
-    return Response(data, mimetype="text/csv",
-                    headers={"Content-Disposition": 'attachment; filename="%s"' % fname})
+    return Response(
+        data,
+        mimetype="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
 
 
 @app.route("/job/<int:job_id>/mailwizz")
@@ -372,7 +377,7 @@ def mailwizz_csv(job_id):
         return redirect(url_for("job", job_id=job_id))
     path = upload_csv(out)
     if not path:
-        flash("no upload CSV in %s" % out)
+        flash(f"no upload CSV in {out}")
         return redirect(url_for("job", job_id=job_id))
     return send_file(path, mimetype="text/csv", as_attachment=True,
                      download_name=os.path.basename(path))
@@ -398,8 +403,12 @@ def mailwizz_zip(job_id):
                 full = os.path.join(root, f)
                 z.write(full, os.path.join(stem, os.path.relpath(full, out)))
     buf.seek(0)
-    return send_file(buf, mimetype="application/zip", as_attachment=True,
-                     download_name="%s-mailwizz.zip" % stem)
+    return send_file(
+        buf,
+        mimetype="application/zip",
+        as_attachment=True,
+        download_name=f"{stem}-mailwizz.zip",
+    )
 
 
 @app.route("/job/<int:job_id>/process", methods=["POST"])
@@ -410,8 +419,8 @@ def process(job_id):
     if not client or not SAFE.match(client):
         flash("pick a client first")
         return redirect(url_for("job", job_id=job_id))
-    if not os.path.isfile("%s/clients/%s/contacts.db" % (BASE, client)):
-        flash("no contact index for %s - run build_index.py first" % client)
+    if not os.path.isfile(f"{BASE}/clients/{client}/contacts.db"):
+        flash(f"no contact index for {client} - run build_index.py first")
         return redirect(url_for("job", job_id=job_id))
 
     con = store.connect()
@@ -427,16 +436,20 @@ def process(job_id):
 
     os.makedirs(RESULTS, exist_ok=True)
     stem = re.sub(r"\.(csv|xlsx|txt)$", "", j["name"], flags=re.I)
-    path = "%s/%s.csv" % (RESULTS, stem)
+    path = f"{RESULTS}/{stem}.csv"
     with open(path, "w", newline="") as fh:
         w = csv.writer(fh)
         for r in rows:
             w.writerow([r["email"], r["code"], r["message"]])
 
-    p = subprocess.run([PYBIN, BASE + "/bin/process_verify.py", path, client],
-                       capture_output=True, text=True, timeout=1800)
+    p = subprocess.run(
+        [PYBIN, f"{BASE}/bin/process_verify.py", path, client],
+        capture_output=True,
+        text=True,
+        timeout=1800,
+    )
     if p.returncode != 0:
-        flash("process_verify failed: %s" % (p.stderr or p.stdout)[-400:])
+        flash(f"process_verify failed: {(p.stderr or p.stdout)[-400:]}")
     else:
         flash("processed into /opt/emails/output/%s/%s" % (client, stem))
     return redirect(url_for("job", job_id=job_id))
@@ -493,7 +506,7 @@ def settings_key():
         d = r.json()
     except Exception as e:
         app.logger.warning("key test: no usable answer: %s", e)
-        flash("key NOT saved - the API did not answer properly: %s" % e)
+        flash(f"key NOT saved - the API did not answer properly: {e}")
         return redirect(url_for("settings"))
 
     app.logger.warning("key test -> http %d %s", r.status_code, raw)
@@ -501,10 +514,10 @@ def settings_key():
     # A bad key still comes back HTTP 200 with a "code" field, so status alone
     # proves nothing. The one unambiguous rejection is the Invalid Key verdict.
     if d.get("message") == "Invalid Key" or d.get("code") in ("--", "", None):
-        flash("key NOT saved - the API rejected it. It replied: %s" % raw)
+        flash(f"key NOT saved - the API rejected it. It replied: {raw}")
         return redirect(url_for("settings"))
 
-    path = BASE + "/mailtester.key"
+    path = f"{BASE}/mailtester.key"
     with open(path, "w") as fh:
         fh.write(key)
     os.chmod(path, 0o600)
@@ -539,7 +552,7 @@ def settings_key():
         cfg["reported_rate"] = rate
         cfg["reported_daily"] = daily
         cfg["key_saved_at"] = store.now_iso()
-        cpath = BASE + "/verify.conf.json"
+        cpath = f"{BASE}/verify.conf.json"
         with open(cpath, "w") as fh:
             json.dump(cfg, fh, indent=2)
         os.chmod(cpath, 0o600)
@@ -548,9 +561,17 @@ def settings_key():
                 % ("{:,}".format(daily), cfg["rate_limit"]))
 
     ok, err = restart_worker()
-    flash("Key accepted - the test answered %s / %s - and saved.%s %s"
-          % (d.get("code"), d.get("message"), note,
-             "Worker restarted." if ok else "Worker restart FAILED: " + err))
+    flash(
+        (
+            "Key accepted - the test answered %s / %s - and saved.%s %s"
+            % (
+                d.get("code"),
+                d.get("message"),
+                note,
+                "Worker restarted." if ok else f"Worker restart FAILED: {err}",
+            )
+        )
+    )
     return redirect(url_for("settings"))
 
 

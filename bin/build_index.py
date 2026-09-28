@@ -9,6 +9,7 @@ Writes /opt/emails/clients/<client>/contacts.db
 
 Run it whenever new source lists are dropped in for that client.
 """
+
 import openpyxl, csv, os, re, sys, glob, sqlite3, unicodedata
 
 if len(sys.argv) < 2:
@@ -17,11 +18,11 @@ CLIENT = sys.argv[1]
 # Root defaults to the VPS layout; override with EMAILS_BASE to run anywhere
 # (e.g. on the Mac when the server is unreachable).
 ROOT   = os.environ.get("EMAILS_BASE", "/opt/emails")
-BASE   = ROOT + "/clients/" + CLIENT
-SRC    = BASE + "/sources"
-DB     = BASE + "/contacts.db"
+BASE = f"{ROOT}/clients/{CLIENT}"
+SRC = f"{BASE}/sources"
+DB = f"{BASE}/contacts.db"
 if not os.path.isdir(SRC):
-    sys.exit("no sources folder for client '%s' — expected %s" % (CLIENT, SRC))
+    sys.exit(f"no sources folder for client '{CLIENT}' — expected {SRC}")
 
 EMAIL = re.compile(r"[A-Za-z0-9!#$%&'*+/=?^_`{|}~.\-]+@[A-Za-z0-9\-]+(?:\.[A-Za-z0-9\-]+)+")
 SMALL = {"de","da","van","von","der","den","del","della","di","bin","binte","al","el","la","le"}
@@ -47,9 +48,12 @@ def proper(name):
         if lw in SMALL and out: out.append(lw); continue
         def cap(p):
             if not p: return p
-            if p.lower().startswith("mc")  and len(p) > 2: return "Mc"  + p[2:].capitalize()
-            if p.lower().startswith("mac") and len(p) > 3: return "Mac" + p[3:].capitalize()
+            if p.lower().startswith("mc")  and len(p) > 2:
+                return f"Mc{p[2:].capitalize()}"
+            if p.lower().startswith("mac") and len(p) > 3:
+                return f"Mac{p[3:].capitalize()}"
             return p.capitalize()
+
         for sep in ("-", "'", "’", "."):
             if sep in w: w = sep.join(cap(x) for x in w.split(sep)); break
         else: w = cap(w)
@@ -84,13 +88,12 @@ def clean_email(raw):
     return e if len(labels[-1]) >= 2 and labels[-1].isalpha() else None
 
 def cell(v):
-    if v is None: return ""
-    return " ".join(str(v).replace("_x000D_", " ").split())
+    return "" if v is None else " ".join(str(v).replace("_x000D_", " ").split())
 
 con = sqlite3.connect(DB)
 con.execute("DROP TABLE IF EXISTS contacts")
-con.execute("""CREATE TABLE contacts (
-    email TEXT PRIMARY KEY, %s, SOURCE TEXT)""" % ", ".join(f"{f} TEXT" for f in FIELDS))
+fields_sql = ", ".join(f"{f} TEXT" for f in FIELDS)
+con.execute(f"CREATE TABLE contacts (email TEXT PRIMARY KEY, {fields_sql}, SOURCE TEXT)")
 
 rows = {}
 def take(email, data, src):
@@ -98,7 +101,7 @@ def take(email, data, src):
     for k, v in data.items():
         if v and not cur.get(k): cur[k] = v
 
-files = sorted(glob.glob(SRC + "/*.xlsx")) + sorted(glob.glob(SRC + "/*.csv"))
+files = sorted(glob.glob(f"{SRC}/*.xlsx")) + sorted(glob.glob(f"{SRC}/*.csv"))
 print(f"client: {CLIENT}")
 print(f"scanning {len(files)} files in {SRC}\n")
 
@@ -125,8 +128,8 @@ for path in files:
                         s = str(row[i])
                         if "@" not in s: continue
                         for m in EMAIL.findall(s):
-                            e = clean_email(m)
-                            if e: take(e, base, name)
+                            if e := clean_email(m):
+                                take(e, base, name)
             wb.close()
         else:
             with open(path, encoding="utf-8-sig", errors="replace") as fh:
@@ -139,8 +142,8 @@ for path in files:
                     for c in row:
                         if "@" not in str(c): continue
                         for m in EMAIL.findall(str(c)):
-                            e = clean_email(m)
-                            if e: take(e, base, name)
+                            if e := clean_email(m):
+                                take(e, base, name)
     except Exception as ex:
         print(f"  SKIP {name}: {str(ex)[:60]}")
         continue
@@ -154,9 +157,12 @@ for r in rows.values():
     r["LASTNAME"]  = proper(r.get("LASTNAME",""))
 
 con.executemany(
-    "INSERT OR REPLACE INTO contacts (email, %s, SOURCE) VALUES (%s)"
-      % (", ".join(FIELDS), ", ".join("?" * (len(FIELDS)+2))),
-    [[r["email"]] + [r.get(f,"") for f in FIELDS] + [r.get("SOURCE","")] for r in rows.values()])
+    f'INSERT OR REPLACE INTO contacts (email, {", ".join(FIELDS)}, SOURCE) VALUES ({", ".join("?" * (len(FIELDS) + 2))})',
+    [
+        [r["email"]] + [r.get(f, "") for f in FIELDS] + [r.get("SOURCE", "")]
+        for r in rows.values()
+    ],
+)
 con.commit()
 
 named = con.execute("SELECT COUNT(*) FROM contacts WHERE FNAME != ''").fetchone()[0]

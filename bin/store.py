@@ -11,10 +11,11 @@ Tables
     cache           every address ever verified, so a repeat costs no credit
     usage           per-day counter, to enforce the daily credit cap
 """
+
 import os, sqlite3, time, datetime
 
 BASE = os.environ.get("EMAILS_BASE", "/opt/emails")
-DB = BASE + "/verify.db"
+DB = f"{BASE}/verify.db"
 
 # The only codes that are a verdict on the address. Anything else - "--" with
 # Disabled Key / Invalid Key - is the API talking about our key.
@@ -105,14 +106,13 @@ def create_job(con, name, client, emails):
     CHUNK_SIZE = 900
     for i in range(0, len(emails), CHUNK_SIZE):
         chunk = emails[i:i+CHUNK_SIZE]
-        q = "SELECT email, code, message, checked_at FROM cache WHERE email IN (%s)" % ",".join("?"*len(chunk))
+        q = f'SELECT email, code, message, checked_at FROM cache WHERE email IN ({",".join("?" * len(chunk))})'
         cur = con.execute(q, chunk)
         for hit in cur.fetchall():
             cache_lookup[hit["email"]] = hit
 
     for e in emails:
-        hit = cache_lookup.get(e)
-        if hit:
+        if hit := cache_lookup.get(e):
             rows.append((job_id, e, "done", hit["code"], hit["message"], hit["checked_at"]))
             cached += 1
         else:
@@ -176,9 +176,7 @@ def recent_span(con, job_id, n=200):
     rows = [r["checked_at"] for r in con.execute(
         "SELECT checked_at FROM emails WHERE job_id=? AND state='done'"
         " AND checked_at!='' ORDER BY checked_at DESC, id DESC LIMIT ?", (job_id, n))]
-    if len(rows) < 2:
-        return None, None, 0
-    return rows[-1], rows[0], len(rows)
+    return (None, None, 0) if len(rows) < 2 else (rows[-1], rows[0], len(rows))
 
 
 def recent_checks(con, job_id, n=12):
@@ -220,8 +218,8 @@ def claim_batch(con, limit):
         if rows:
             ids = [r["id"] for r in rows]
             con.execute(
-                "UPDATE emails SET next_try=? WHERE id IN (%s)" % ",".join("?" * len(ids)),
-                [now + 900] + ids,      # parked for 15 min in case we die mid-flight
+                f'UPDATE emails SET next_try=? WHERE id IN ({",".join("?" * len(ids))})',
+                [now + 900] + ids,
             )
         con.commit()
     except Exception:
