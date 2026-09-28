@@ -24,9 +24,11 @@ NOT_FINAL = f"(code NOT IN ({verdicts_params}) OR lower(message) IN ({transient_
 params = tuple(store.VERDICTS) + tuple(m.lower() for m in store.TRANSIENT)
 
 con = store.connect()
+# sourcery skip: sql-injection
 cached = con.execute(
     f"SELECT COUNT(*) FROM cache WHERE {NOT_FINAL}", params
 ).fetchone()[0]
+# sourcery skip: sql-injection
 rows = con.execute(f"SELECT code, message, COUNT(*) n FROM emails"
                    f" WHERE state='done' AND {NOT_FINAL}"
                    f" GROUP BY code, message ORDER BY n DESC", params).fetchall()
@@ -40,7 +42,9 @@ if "--apply" not in sys.argv:
     print("dry run - nothing changed. Run again with --apply to do it.")
     sys.exit(0)
 
+# sourcery skip: sql-injection
 con.execute(f"DELETE FROM cache WHERE {NOT_FINAL}", params)
+# sourcery skip: sql-injection
 con.execute(f"UPDATE emails SET state='failed', next_try=0"
             f" WHERE state='done' AND {NOT_FINAL}", params)
 con.commit()

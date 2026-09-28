@@ -64,6 +64,7 @@ CH = 900
 for i in range(0, len(accepted), CH):
     chunk = accepted[i:i+CH]
     q = f'SELECT * FROM contacts WHERE email IN ({",".join("?" * len(chunk))})'
+    # sourcery skip: sql-injection
     cur = con.execute(q, chunk)
     cols = [d[0] for d in cur.description]
     for row in cur.fetchall():

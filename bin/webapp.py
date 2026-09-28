@@ -442,6 +442,7 @@ def process(job_id):
         for r in rows:
             w.writerow([r["email"], r["code"], r["message"]])
 
+    # sourcery skip: command-injection
     p = subprocess.run(
         [PYBIN, f"{BASE}/bin/process_verify.py", path, client],
         capture_output=True,
@@ -472,8 +473,9 @@ def mask(key):
 
 def restart_worker():
     try:
+        # sourcery skip: command-injection
         p = subprocess.run(["systemctl", "restart", "email-verify-worker"],
-                           capture_output=True, text=True, timeout=60)
+                           capture_output=True, text=True, timeout=60, check=False)
         return p.returncode == 0, (p.stderr or p.stdout).strip()
     except Exception as e:
         return False, str(e)

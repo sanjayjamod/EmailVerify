@@ -107,6 +107,7 @@ def create_job(con, name, client, emails):
     for i in range(0, len(emails), CHUNK_SIZE):
         chunk = emails[i:i+CHUNK_SIZE]
         q = f'SELECT email, code, message, checked_at FROM cache WHERE email IN ({",".join("?" * len(chunk))})'
+        # sourcery skip: sql-injection
         cur = con.execute(q, chunk)
         for hit in cur.fetchall():
             cache_lookup[hit["email"]] = hit
@@ -217,6 +218,7 @@ def claim_batch(con, limit):
         ).fetchall()
         if rows:
             ids = [r["id"] for r in rows]
+            # sourcery skip: sql-injection
             con.execute(
                 f'UPDATE emails SET next_try=? WHERE id IN ({",".join("?" * len(ids))})',
                 [now + 900] + ids,

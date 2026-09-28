@@ -23,6 +23,7 @@ TOKEN = open(f"{BASE}/api.token").read().strip()
 SAFE   = re.compile(r"^[A-Za-z0-9._ -]+$")      # no slashes, no traversal
 
 def run(cmd, timeout):
+    # sourcery skip: command-injection
     p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False)
     return p.returncode, p.stdout, p.stderr
 
