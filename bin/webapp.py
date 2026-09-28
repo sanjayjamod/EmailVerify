@@ -447,11 +447,12 @@ def process(job_id):
         capture_output=True,
         text=True,
         timeout=1800,
+        check=False,
     )
     if p.returncode != 0:
         flash(f"process_verify failed: {(p.stderr or p.stdout)[-400:]}")
     else:
-        flash("processed into /opt/emails/output/%s/%s" % (client, stem))
+        flash(f"processed into /opt/emails/output/{client}/{stem}")
     return redirect(url_for("job", job_id=job_id))
 
 
@@ -562,15 +563,7 @@ def settings_key():
 
     ok, err = restart_worker()
     flash(
-        (
-            "Key accepted - the test answered %s / %s - and saved.%s %s"
-            % (
-                d.get("code"),
-                d.get("message"),
-                note,
-                "Worker restarted." if ok else f"Worker restart FAILED: {err}",
-            )
-        )
+        f'Key accepted - the test answered {d.get("code")} / {d.get("message")} - and saved.{note} {"Worker restarted." if ok else f"Worker restart FAILED: {err}"}'
     )
     return redirect(url_for("settings"))
 
