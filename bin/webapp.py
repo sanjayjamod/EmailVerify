@@ -434,7 +434,7 @@ def process(job_id):
             w.writerow([r["email"], r["code"], r["message"]])
 
     p = subprocess.run([PYBIN, BASE + "/bin/process_verify.py", path, client],
-                       capture_output=True, text=True, timeout=1800)
+                       capture_output=True, text=True, timeout=1800, check=False)
     if p.returncode != 0:
         flash("process_verify failed: %s" % (p.stderr or p.stdout)[-400:])
     else:
@@ -459,7 +459,7 @@ def mask(key):
 def restart_worker():
     try:
         p = subprocess.run(["systemctl", "restart", "email-verify-worker"],
-                           capture_output=True, text=True, timeout=60)
+                           capture_output=True, text=True, timeout=60, check=False)
         return p.returncode == 0, (p.stderr or p.stdout).strip()
     except Exception as e:
         return False, str(e)

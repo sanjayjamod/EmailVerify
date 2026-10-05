@@ -90,7 +90,7 @@ def cell(v):
 con = sqlite3.connect(DB)
 con.execute("DROP TABLE IF EXISTS contacts")
 con.execute("""CREATE TABLE contacts (
-    email TEXT PRIMARY KEY, %s, SOURCE TEXT)""" % ", ".join(f"{f} TEXT" for f in FIELDS))
+    email TEXT PRIMARY KEY, {0}, SOURCE TEXT)""".format(", ".join(f"{f} TEXT" for f in FIELDS)))
 
 rows = {}
 def take(email, data, src):

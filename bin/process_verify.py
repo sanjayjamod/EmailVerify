@@ -59,7 +59,7 @@ lookup = {}
 CH = 900
 for i in range(0, len(accepted), CH):
     chunk = accepted[i:i+CH]
-    q = "SELECT * FROM contacts WHERE email IN (%s)" % ",".join("?"*len(chunk))
+    q = "SELECT * FROM contacts WHERE email IN ({0})".format(",".join("?"*len(chunk)))
     cur = con.execute(q, chunk)
     cols = [d[0] for d in cur.description]
     for row in cur.fetchall():

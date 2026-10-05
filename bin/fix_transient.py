@@ -17,9 +17,9 @@ import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import store
 
-NOT_FINAL = ("(code NOT IN (%s) OR lower(message) IN (%s))"
-             % (",".join("'%s'" % c for c in store.VERDICTS),
-                ",".join("'%s'" % m.lower() for m in store.TRANSIENT)))
+NOT_FINAL = ("(code NOT IN ({0}) OR lower(message) IN ({1}))".format(
+             ",".join("'%s'" % c for c in store.VERDICTS),
+             ",".join("'%s'" % m.lower() for m in store.TRANSIENT)))
 
 con = store.connect()
 cached = con.execute("SELECT COUNT(*) FROM cache WHERE " + NOT_FINAL).fetchone()[0]
