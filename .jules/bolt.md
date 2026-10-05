@@ -1,0 +1,3 @@
+## 2026-10-05 - Optimize SQLite bulk operations for create_job
+**Learning:** Using a temporary table with a JOIN is significantly faster (approx 2x) and more scalable than chunking variable bindings for IN clauses, while also preventing SQLITE_MAX_VARIABLE_NUMBER limits. Replacing an N+1 query loop with a single bulk operation dramatically improved the performance of inserting large jobs with pre-existing cached results.
+**Action:** When inserting large batches of data in SQLite that need to check against existing tables (like a cache), always prefer bulk insertion via temporary tables and JOINs over N+1 queries or chunked IN clauses.
