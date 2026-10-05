@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Settings &middot; Email Verify</title>
+<style>
+  :root{--bg:#0f1115;--card:#171a21;--line:#262b35;--fg:#e7e9ee;--dim:#9aa2b1;
+        --ok:#3ecf8e;--bad:#ef5f6b;--warn:#e9b949;--acc:#4c8dff}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+       font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:720px;margin:0 auto;padding:28px 20px 60px}
+  h1{font-size:20px;margin:6px 0 22px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;
+        padding:18px;margin-bottom:18px}
+  .card h2{font-size:14px;text-transform:uppercase;letter-spacing:.06em;
+           color:var(--dim);margin:0 0 14px;font-weight:600}
+  a{color:var(--acc);text-decoration:none}
+  a:hover{text-decoration:underline}
+  input,select,button{font:inherit;border-radius:7px;border:1px solid var(--line);
+        background:#0d0f14;color:var(--fg);padding:9px 11px}
+  button{background:var(--acc);border-color:var(--acc);color:#fff;cursor:pointer;
+         font-weight:600;padding:9px 16px}
+  button:hover{filter:brightness(1.1)}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .row > input[type=text]{flex:1;min-width:240px}
+  .meta{color:var(--dim);font-size:13px}
+  .flash{background:rgba(76,141,255,.1);border:1px solid rgba(76,141,255,.35);
+         padding:11px 14px;border-radius:8px;margin-bottom:16px;font-size:14px}
+  .alert{background:rgba(239,95,107,.1);border:1px solid rgba(239,95,107,.4);
+         padding:11px 14px;border-radius:8px;margin-bottom:18px;font-size:14px}
+  .good{background:rgba(62,207,142,.1);border:1px solid rgba(62,207,142,.4);
+        padding:11px 14px;border-radius:8px;margin-bottom:16px;font-size:14px}
+  code{background:#0d0f14;padding:2px 6px;border-radius:4px;font-size:13px}
+  label{display:block;font-size:13px;color:var(--dim);margin-bottom:5px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+  hr{border:0;border-top:1px solid var(--line);margin:20px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <a href="/" class="meta">&larr; back</a>
+  <h1>Settings</h1>
+
+  {% with msgs = get_flashed_messages() %}
+    {% for m in msgs %}<div class="flash">{{ m }}</div>{% endfor %}
+  {% endwith %}
+
+  <div class="card">
+    <h2>MailTester Ninja API key</h2>
+
+    {% if key_set %}
+      <div class="good">Key is set &middot; <code>{{ key_masked }}</code></div>
+    {% else %}
+      <div class="alert">No key yet. Nothing gets verified until one is saved.</div>
+    {% endif %}
+
+    <form class="row" method="post" action="/settings/key">
+      <input type="text" name="key" placeholder="paste your key here"
+             autocomplete="off" spellcheck="false" required>
+      <button type="submit">{{ 'Replace key' if key_set else 'Save key' }}</button>
+    </form>
+    <div class="meta" style="margin-top:11px">
+      The key is tried against the live API before it is written, so a typo can
+      never leave the worker running against a dead key. The test costs one
+      credit. Saved to <code>/opt/emails/mailtester.key</code>, readable only by
+      root, and the worker is restarted straight after.
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Rate</h2>
+    {% if key_set and cfg.reported_rate %}
+      <div class="good">
+        Your key allows <b>{{ cfg.reported_rate }}</b> checks every 10 seconds
+        {% if cfg.reported_daily %}and <b>{{ "{:,}".format(cfg.reported_daily) }}</b> a day{% endif %}.
+        The worker is set to match.
+      </div>
+      <div class="meta">
+        Read straight off the API when the key was saved{% if cfg.key_saved_at %}
+        ({{ cfg.key_saved_at.replace('T',' ') }}){% endif %}. Save the key again
+        any time to refresh it &mdash; after a plan upgrade, for instance.
+        At this rate a full day of running gets through about
+        {{ "{:,}".format(per_day) }} addresses.
+      </div>
+    {% elif key_set %}
+      <div class="meta">
+        Your key did not report a limit, so the worker is running at the safe
+        default of <b>{{ cfg.rate_limit }}</b> every {{ cfg.rate_period|int }}s
+        (about {{ "{:,}".format(per_day) }} a day).
+      </div>
+    {% else %}
+      <div class="meta">Save a key above and its rate limit will show up here.</div>
+    {% endif %}
+  </div>
+
+</div>
+</body>
+</html>
