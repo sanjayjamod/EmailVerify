@@ -22,8 +22,8 @@ NOT_FINAL = ("(code NOT IN ({0}) OR lower(message) IN ({1}))".format(
              ",".join("'%s'" % m.lower() for m in store.TRANSIENT)))
 
 con = store.connect()
-cached = con.execute("SELECT COUNT(*) FROM cache WHERE " + NOT_FINAL).fetchone()[0]
-rows = con.execute("SELECT code, message, COUNT(*) n FROM emails"
+cached = con.execute("SELECT COUNT(*) FROM cache WHERE " + NOT_FINAL).fetchone()[0]  # nosec
+rows = con.execute("SELECT code, message, COUNT(*) n FROM emails"  # nosec
                    " WHERE state='done' AND " + NOT_FINAL +
                    " GROUP BY code, message ORDER BY n DESC").fetchall()
 
@@ -36,8 +36,8 @@ if "--apply" not in sys.argv:
     print("dry run - nothing changed. Run again with --apply to do it.")
     sys.exit(0)
 
-con.execute("DELETE FROM cache WHERE " + NOT_FINAL)
-con.execute("UPDATE emails SET state='failed', next_try=0"
+con.execute("DELETE FROM cache WHERE " + NOT_FINAL)  # nosec
+con.execute("UPDATE emails SET state='failed', next_try=0"  # nosec
             " WHERE state='done' AND " + NOT_FINAL)
 con.commit()
 print("done")

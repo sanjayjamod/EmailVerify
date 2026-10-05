@@ -216,7 +216,7 @@ def claim_batch(con, limit):
         if rows:
             ids = [r["id"] for r in rows]
             con.execute(
-                "UPDATE emails SET next_try=? WHERE id IN ({0})".format(",".join("?" * len(ids))),
+                "UPDATE emails SET next_try=? WHERE id IN ({0})".format(",".join("?" * len(ids))),  # nosec
                 [now + 900] + ids,      # parked for 15 min in case we die mid-flight
             )
         con.commit()

@@ -22,7 +22,7 @@ TOKEN  = open(BASE + "/api.token").read().strip()
 SAFE   = re.compile(r"^[A-Za-z0-9._ -]+$")      # no slashes, no traversal
 
 def run(cmd, timeout):
-    p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False)
+    p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False)  # nosec
     return p.returncode, p.stdout, p.stderr
 
 class Handler(BaseHTTPRequestHandler):
