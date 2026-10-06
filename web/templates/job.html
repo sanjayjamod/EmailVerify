@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ job.name }} &middot; Email Verify</title>
+<style>
+  :root{--bg:#0f1115;--card:#171a21;--line:#262b35;--fg:#e7e9ee;--dim:#9aa2b1;
+        --ok:#3ecf8e;--bad:#ef5f6b;--warn:#e9b949;--acc:#4c8dff}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+       font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:880px;margin:0 auto;padding:28px 20px 60px}
+  h1{font-size:20px;margin:6px 0 4px}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:22px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;
+        padding:18px;margin-bottom:18px}
+  .card h2{font-size:14px;text-transform:uppercase;letter-spacing:.06em;
+           color:var(--dim);margin:0 0 14px;font-weight:600}
+  a{color:var(--acc);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .bar{height:10px;background:#0d0f14;border-radius:5px;overflow:hidden;margin:4px 0 10px}
+  .bar i{display:block;height:100%;background:var(--acc);transition:width .6s}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:14px}
+  .stat b{display:block;font-size:21px;line-height:1.25;font-variant-numeric:tabular-nums}
+  .stat span{color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th{text-align:left;color:var(--dim);font-weight:600;font-size:12px;
+     text-transform:uppercase;letter-spacing:.05em;padding:0 10px 8px;border-bottom:1px solid var(--line)}
+  td{padding:8px 10px;border-bottom:1px solid var(--line)}
+  tr:last-child td{border-bottom:0}
+  td.n{text-align:right;font-variant-numeric:tabular-nums}
+  input,select,button{font:inherit;border-radius:7px;border:1px solid var(--line);
+        background:#0d0f14;color:var(--fg);padding:9px 11px}
+  button{background:var(--acc);border-color:var(--acc);color:#fff;cursor:pointer;font-weight:600;padding:9px 16px}
+  button.ghost{background:transparent;border-color:var(--line);color:var(--fg);font-weight:500}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .flash{background:rgba(76,141,255,.1);border:1px solid rgba(76,141,255,.35);
+         padding:11px 14px;border-radius:8px;margin-bottom:16px;font-size:14px}
+  .ok{color:var(--ok)} .bad{color:var(--bad)} .warn{color:var(--warn)}
+  .meta{color:var(--dim);font-size:13px}
+  .console{font:13px/1.7 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+           background:#0d0f14;border:1px solid var(--line);border-radius:8px;
+           padding:12px 14px;overflow-x:auto}
+  .console .line{display:flex;gap:10px;white-space:nowrap}
+  .console .addr{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--fg)}
+  .console .verdict{font-weight:600}
+  .console .t{color:var(--dim)}
+  .now{font:13px/1.7 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+       color:var(--dim);margin-top:10px}
+  .now b{color:var(--acc);font-weight:600}
+  .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--ok);
+       margin-right:7px;vertical-align:middle;animation:pulse 1.6s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <a href="/" class="meta">&larr; all jobs</a>
+  <h1>{{ job.name }}</h1>
+  <div class="sub">
+    queued {{ job.created_at.replace('T',' ') }}
+    {% if job.client %} &middot; client <b>{{ job.client }}</b>{% endif %}
+    &middot; <span id="status">{{ job.status }}</span>
+  </div>
+
+  {% with msgs = get_flashed_messages() %}
+    {% for m in msgs %}<div class="flash">{{ m }}</div>{% endfor %}
+  {% endwith %}
+
+  <div class="card">
+    <div class="bar"><i id="bar" style="width:0%"></i></div>
+    <div class="meta" id="line">loading...</div>
+
+    <div class="stats" style="margin-top:18px">
+      <div class="stat"><b id="s-total">{{ counts.total }}</b><span>total</span></div>
+      <div class="stat"><b class="ok"   id="s-acc"> {{ counts.accepted }}</b><span>&#10003; accepted</span></div>
+      <div class="stat"><b class="bad"  id="s-rej"> {{ counts.rejected }}</b><span>&#10007; rejected</span></div>
+      <div class="stat"><b class="warn" id="s-unk"> {{ counts.unknown }}</b><span>? risky</span></div>
+      <div class="stat"><b id="s-pend">{{ counts.pending }}</b><span>pending</span></div>
+      <div class="stat"><b class="bad" id="s-fail">{{ counts.failed }}</b><span>failed</span></div>
+    </div>
+
+    <div class="now" id="now">&nbsp;</div>
+  </div>
+
+  <div class="card">
+    <h2>Live feed</h2>
+    <div class="console" id="feed">
+      {% for r in recent %}
+      <div class="line">
+        <span class="t">{{ r.checked_at[11:19] }}</span>
+        <span class="addr">{{ r.email }}</span>
+        <span class="verdict {{ 'ok' if r.code=='ok' and r.message=='Accepted'
+                                 else ('bad' if r.code=='ko' else 'warn') }}">{{ r.message }}</span>
+      </div>
+      {% else %}
+      <div class="meta">waiting for the first result...</div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Result breakdown</h2>
+    {% if breakdown %}
+    <table>
+      <tr><th>Code</th><th>Message</th><th style="text-align:right">Count</th></tr>
+      {% for b in breakdown %}
+      <tr>
+        <td class="{{ 'ok' if b.code=='ok' else ('bad' if b.code=='ko' else 'warn') }}">{{ b.code }}</td>
+        <td>{{ b.message }}</td>
+        <td class="n">{{ b.n }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% else %}
+      <div class="meta">Nothing checked yet.</div>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h2>Take it further</h2>
+    <div class="row" style="margin-bottom:12px">
+      <a href="/job/{{ job.id }}/download"><button type="button" class="ghost">Download CSV</button></a>
+      <form method="post" action="/job/{{ job.id }}/pause" style="display:inline">
+        <button type="submit" class="ghost">{{ 'Resume' if job.status == 'paused' else 'Pause' }}</button>
+      </form>
+      {% if counts.failed %}
+      <form method="post" action="/job/{{ job.id }}/retry-failed" style="display:inline">
+        <button type="submit" class="ghost">Retry {{ counts.failed }} failed</button>
+      </form>
+      {% endif %}
+    </div>
+    <form class="row" method="post" action="/job/{{ job.id }}/process">
+      <select name="client">
+        {% for c in clients %}
+        <option value="{{ c }}" {{ 'selected' if c == job.client else '' }}>{{ c }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit">Make MailWizz-ready</button>
+    </form>
+    <div class="meta" style="margin-top:11px">
+      Runs <code>process_verify.py</code> against that client's contact index and
+      writes the upload / bad / risky folders into <code>/opt/emails/output/</code>.
+    </div>
+
+    {% if has_output %}
+    <div class="row" style="margin-top:14px">
+      <a href="/job/{{ job.id }}/mailwizz"><button type="button">Download MailWizz CSV</button></a>
+      <a href="/job/{{ job.id }}/mailwizz.zip"><button type="button" class="ghost">Download all folders (.zip)</button></a>
+    </div>
+    <div class="meta" style="margin-top:8px">
+      Ready: <code>{{ upload_name or 'upload CSV' }}</code> - the accepted-only file
+      you import into MailWizz. The .zip also carries the bad / risky / re-verify lists.
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+
+<script>
+const N = n => (n === null || n === undefined) ? '-' : n.toLocaleString();
+
+function hms(sec){
+  if(!sec) return '00h 00min 00sec';
+  const h = Math.floor(sec/3600), m = Math.floor(sec%3600/60), s = sec%60;
+  return String(h).padStart(2,'0')+'h '+String(m).padStart(2,'0')+'min '+
+         String(s).padStart(2,'0')+'sec';
+}
+
+function verdictClass(r){
+  if(r.code === 'ok' && r.message === 'Accepted') return 'ok';
+  return r.code === 'ko' ? 'bad' : 'warn';
+}
+
+async function tick(){
+  let d;
+  try{ d = await (await fetch('/api/job/{{ job.id }}')).json(); }
+  catch(e){ return; }                      // keep the last good numbers
+
+  document.getElementById('bar').style.width = d.pct + '%';
+  document.getElementById('s-total').textContent = N(d.total);
+  document.getElementById('s-acc').textContent   = N(d.accepted);
+  document.getElementById('s-rej').textContent   = N(d.rejected);
+  document.getElementById('s-unk').textContent   = N(d.unknown);
+  document.getElementById('s-pend').textContent  = N(d.pending);
+  document.getElementById('s-fail').textContent  = N(d.failed);
+  document.getElementById('status').textContent  = d.status;
+
+  // the console app's summary line, same shape
+  let line = hms(d.elapsed_sec) + ' · ' + d.speed + '/sec · ' +
+             N(d.done + d.failed) + ' / ' + N(d.total) + ' · ' + d.pct + '%';
+  if(d.pending > 0 && d.eta_min !== null){
+    const h = Math.floor(d.eta_min/60), m = d.eta_min % 60;
+    line += ' · ' + (h ? h+'h '+m+'m' : m+'m') + ' left';
+  }
+  line += ' · ' + N(d.used_today) + '/' + N(d.daily_cap) + ' today · ' +
+          d.connections + 'cnx';
+  document.getElementById('line').textContent = line;
+
+  // what is in the air right now
+  const now = document.getElementById('now');
+  if(d.in_flight && d.in_flight.length){
+    now.innerHTML = '<span class="dot"></span>checking <b>' +
+      d.in_flight.map(e => e.replace(/[<>&]/g, '')).join('</b>, <b>') + '</b>';
+  } else {
+    now.innerHTML = d.pending > 0 ? '<span class="dot"></span>waiting for a slot...'
+                                  : 'nothing left to check';
+  }
+
+  // rolling feed
+  if(d.recent){
+    document.getElementById('feed').innerHTML = d.recent.map(r =>
+      '<div class="line"><span class="t">' + (r.checked_at||'').slice(11,19) +
+      '</span><span class="addr">' + r.email.replace(/[<>&]/g,'') +
+      '</span><span class="verdict ' + verdictClass(r) + '">' +
+      r.message.replace(/[<>&]/g,'') + '</span></div>').join('')
+      || '<div class="meta">waiting for the first result...</div>';
+  }
+}
+tick(); setInterval(tick, 3000);
+</script>
+</body>
+</html>
