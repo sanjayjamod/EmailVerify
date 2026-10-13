@@ -1,0 +1,15 @@
+[Unit]
+Description=Email pipeline API (for n8n)
+After=network.target docker.service
+
+[Service]
+Type=simple
+ExecStart=/opt/tpl/venv/bin/python /opt/emails/bin/api.py 172.16.5.1 8899
+Restart=always
+RestartSec=5
+WorkingDirectory=/opt/emails
+StandardOutput=append:/opt/emails/logs/api.log
+StandardError=append:/opt/emails/logs/api.log
+
+[Install]
+WantedBy=multi-user.target
