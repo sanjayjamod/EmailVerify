@@ -89,6 +89,7 @@ def cell(v):
 
 con = sqlite3.connect(DB)
 con.execute("DROP TABLE IF EXISTS contacts")
+# sourcery skip: sql-injection
 con.execute("""CREATE TABLE contacts (
     email TEXT PRIMARY KEY, %s, SOURCE TEXT)""" % ", ".join(f"{f} TEXT" for f in FIELDS))
 

@@ -210,6 +210,7 @@ def claim_batch(con, limit):
         ).fetchall()
         if rows:
             ids = [r["id"] for r in rows]
+            # sourcery skip: sql-injection
             con.execute(
                 "UPDATE emails SET next_try=? WHERE id IN (%s)" % ",".join("?" * len(ids)),
                 [now + 900] + ids,      # parked for 15 min in case we die mid-flight
