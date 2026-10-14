@@ -1,0 +1,23 @@
+# secrets - never commit
+mailtester.key
+api.token
+verify.conf.json
+
+# data - client lists and results stay on the server
+*.db
+*.db-shm
+*.db-wal
+clients/
+uploads/
+results/
+output/
+import/
+inbox/
+logs/
+
+# runtime
+venv/
+__pycache__/
+*.pyc
+*.bak
+*.bak-*
