@@ -1,0 +1,4 @@
+
+## 2026-10-18 - Optimize bulk insert and cache lookups using TEMP TABLE + LEFT JOIN
+**Learning:** In SQLite, performing N+1 queries using a loop in Python (e.g., `SELECT ... FROM cache WHERE email=?`) followed by an `executemany` insert is significantly slower than using a Temporary Table and a `LEFT JOIN`. For a batch of 50,000 emails, inserting into a temporary table and then using a single `INSERT OR IGNORE INTO ... SELECT ... LEFT JOIN` reduces the time by approximately 3x (from 0.76s to 0.26s), and natively bypasses `SQLITE_MAX_VARIABLE_NUMBER` limits.
+**Action:** When handling bulk inserts or lookups in SQLite where a large list of items from Python needs to be checked against a database table, prefer using a `CREATE TEMP TABLE`, bulk insert into it, and then perform a `JOIN` rather than chunking `IN` queries or using N+1 lookups.
