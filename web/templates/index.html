@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Email Verify</title>
+<style>
+  :root{--bg:#0f1115;--card:#171a21;--line:#262b35;--fg:#e7e9ee;--dim:#9aa2b1;
+        --ok:#3ecf8e;--bad:#ef5f6b;--warn:#e9b949;--acc:#4c8dff}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+       font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:960px;margin:0 auto;padding:28px 20px 60px}
+  h1{font-size:21px;margin:0 0 4px}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:24px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;
+        padding:18px;margin-bottom:18px}
+  .card h2{font-size:14px;text-transform:uppercase;letter-spacing:.06em;
+           color:var(--dim);margin:0 0 14px;font-weight:600}
+  input,select,button{font:inherit;border-radius:7px;border:1px solid var(--line);
+        background:#0d0f14;color:var(--fg);padding:9px 11px}
+  input[type=file]{padding:7px}
+  button{background:var(--acc);border-color:var(--acc);color:#fff;cursor:pointer;
+         font-weight:600;padding:9px 16px}
+  button:hover{filter:brightness(1.1)}
+  button.ghost{background:transparent;border-color:var(--line);color:var(--fg);font-weight:500}
+  button.mini{padding:4px 10px;font-size:12px;font-weight:600}
+  button.danger{background:transparent;border-color:rgba(255,107,107,.45);color:#ff6b6b;font-weight:600}
+  button.danger:hover{background:rgba(255,107,107,.12);filter:none}
+  td.acts{white-space:nowrap}
+  td.acts form{display:inline-block;margin-left:8px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .row > input[type=email]{flex:1;min-width:220px}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th{text-align:left;color:var(--dim);font-weight:600;font-size:12px;
+     text-transform:uppercase;letter-spacing:.05em;padding:0 10px 8px;border-bottom:1px solid var(--line)}
+  td{padding:11px 10px;border-bottom:1px solid var(--line)}
+  tr:last-child td{border-bottom:0}
+  a{color:var(--acc);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .bar{height:5px;background:#0d0f14;border-radius:3px;overflow:hidden;min-width:90px}
+  .bar i{display:block;height:100%;background:var(--acc)}
+  .pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:12px;font-weight:600}
+  .pill.done{background:rgba(62,207,142,.14);color:var(--ok)}
+  .pill.running{background:rgba(76,141,255,.16);color:var(--acc)}
+  .pill.queued{background:rgba(154,162,177,.14);color:var(--dim)}
+  .pill.paused{background:rgba(233,185,73,.16);color:var(--warn)}
+  .flash{background:rgba(76,141,255,.1);border:1px solid rgba(76,141,255,.35);
+         padding:11px 14px;border-radius:8px;margin-bottom:16px;font-size:14px}
+  .alert{background:rgba(239,95,107,.1);border:1px solid rgba(239,95,107,.4);
+         padding:11px 14px;border-radius:8px;margin-bottom:18px;font-size:14px}
+  .meta{color:var(--dim);font-size:13px}
+  #res{margin-top:13px;font-size:14px;display:none}
+  .muted{color:var(--dim)}
+  td.n{text-align:right;font-variant-numeric:tabular-nums}
+  .ok{color:var(--ok)} .bad{color:var(--bad)} .warn{color:var(--warn)}
+  .empty{color:var(--dim);text-align:center;padding:26px 0;font-size:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="row" style="justify-content:space-between;align-items:flex-start">
+    <div>
+      <h1>Email Verify</h1>
+      <div class="sub">
+        MailTester Ninja &middot; {{ rate[0] }} checks / {{ rate[1] }}s
+        &middot; today {{ used }}{% if cap %} of {{ cap }}{% endif %}
+      </div>
+    </div>
+    <a href="/settings"><button type="button" class="ghost">Settings</button></a>
+  </div>
+
+  {% if not has_key %}
+    <div class="alert"><b>No API key yet.</b>
+      Nothing will be verified until one is saved &mdash;
+      <a href="/settings">add it in Settings</a>.</div>
+  {% endif %}
+
+  {% with msgs = get_flashed_messages() %}
+    {% for m in msgs %}<div class="flash">{{ m }}</div>{% endfor %}
+  {% endwith %}
+
+  <div class="card">
+    <h2>Check one address</h2>
+    <form class="row" onsubmit="return checkOne(event)">
+      <input type="email" id="one" placeholder="someone@company.com" required>
+      <button type="submit">Check</button>
+    </form>
+    <div id="res"></div>
+  </div>
+
+  <div class="card">
+    <h2>Upload a list</h2>
+    <form class="row" method="post" action="/upload" enctype="multipart/form-data">
+      <input type="file" name="file" accept=".csv,.txt,.xlsx,.xlsm" required>
+      <select name="client">
+        <option value="">no client</option>
+        {% for c in clients %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+      </select>
+      <button type="submit">Queue it</button>
+    </form>
+    <div class="meta" style="margin-top:11px">
+      CSV, TXT or XLSX. Addresses are pulled out of any column. Duplicates and
+      anything checked before are skipped, so they cost nothing.
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Jobs</h2>
+    {% if jobs %}
+    <table>
+      <tr><th>Job</th><th>Progress</th>
+          <th style="text-align:right">&#10003;</th>
+          <th style="text-align:right">&#10007;</th>
+          <th style="text-align:right">?</th>
+          <th>Status</th><th></th></tr>
+      {% for j in jobs %}
+      <tr>
+        <td><a href="/job/{{ j.id }}">{{ j.name }}</a>
+            {% if j.client %}<span class="muted"> &middot; {{ j.client }}</span>{% endif %}
+            <div class="meta">{{ j.created_at.replace('T',' ') }}</div></td>
+        <td><div class="bar"><i style="width:{{ j.pct }}%"></i></div>
+            <div class="meta">{{ "{:,}".format(j.done + j.failed) }} / {{ "{:,}".format(j.total) }}
+              &middot; {{ j.pct }}%{% if j.speed %} &middot; {{ j.speed }}/sec{% endif %}</div></td>
+        <td class="n ok">{{ "{:,}".format(j.accepted) }}</td>
+        <td class="n bad">{{ "{:,}".format(j.rejected) }}</td>
+        <td class="n warn">{{ "{:,}".format(j.unknown) }}</td>
+        <td><span class="pill {{ j.status }}">{{ j.status }}</span></td>
+        <td class="acts">
+          <a href="/job/{{ j.id }}/download">CSV</a>
+          {% if j.status != 'done' %}
+          <form method="post" action="/job/{{ j.id }}/pause">
+            <button type="submit" class="mini ghost">{{ 'Start' if j.status == 'paused' else 'Stop' }}</button>
+          </form>
+          {% endif %}
+          <form method="post" action="/job/{{ j.id }}/delete"
+                onsubmit="return confirm('Delete {{ j.name }}? Its queued addresses go too. Already-checked results stay cached, so nothing is paid for twice.');">
+            <button type="submit" class="mini danger">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% else %}
+      <div class="empty">Nothing queued yet. Upload a list above.</div>
+    {% endif %}
+  </div>
+
+</div>
+
+<script>
+async function checkOne(ev){
+  ev.preventDefault();
+  const box = document.getElementById('res');
+  const email = document.getElementById('one').value.trim();
+  box.style.display = 'block';
+  box.textContent = 'checking...';
+  const fd = new FormData(); fd.append('email', email);
+  try{
+    const r = await fetch('/check', {method:'POST', body:fd});
+    const d = await r.json();
+    if(!d.ok){ box.innerHTML = '<span style="color:var(--bad)">'+d.error+'</span>'; return false; }
+    const good = d.code === 'ok' && d.message === 'Accepted';
+    const col = good ? 'var(--ok)' : (d.code === 'ko' ? 'var(--bad)' : 'var(--warn)');
+    box.innerHTML = '<b>'+d.email+'</b> &rarr; <span style="color:'+col+'"><b>'+
+      d.message+'</b></span> <span class="muted">('+d.code+
+      (d.cached ? ', from cache' : '')+')</span>';
+  }catch(e){
+    box.innerHTML = '<span style="color:var(--bad)">request failed</span>';
+  }
+  return false;
+}
+</script>
+</body>
+</html>
