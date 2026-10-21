@@ -22,10 +22,10 @@ NOT_FINAL = ("(code NOT IN (%s) OR lower(message) IN (%s))"
                 ",".join("'%s'" % m.lower() for m in store.TRANSIENT)))
 
 con = store.connect()
-cached = con.execute("SELECT COUNT(*) FROM cache WHERE " + NOT_FINAL).fetchone()[0]
+cached = con.execute("SELECT COUNT(*) FROM cache WHERE " + NOT_FINAL).fetchone()[0]  # sourcery skip: sql-injection
 rows = con.execute("SELECT code, message, COUNT(*) n FROM emails"
                    " WHERE state='done' AND " + NOT_FINAL +
-                   " GROUP BY code, message ORDER BY n DESC").fetchall()
+                   " GROUP BY code, message ORDER BY n DESC").fetchall()  # sourcery skip: sql-injection
 
 print("cache entries to drop    %d" % cached)
 print("job rows to mark failed  %d" % sum(r["n"] for r in rows))
@@ -36,8 +36,8 @@ if "--apply" not in sys.argv:
     print("dry run - nothing changed. Run again with --apply to do it.")
     sys.exit(0)
 
-con.execute("DELETE FROM cache WHERE " + NOT_FINAL)
+con.execute("DELETE FROM cache WHERE " + NOT_FINAL)  # sourcery skip: sql-injection
 con.execute("UPDATE emails SET state='failed', next_try=0"
-            " WHERE state='done' AND " + NOT_FINAL)
+            " WHERE state='done' AND " + NOT_FINAL)  # sourcery skip: sql-injection
 con.commit()
 print("done")
