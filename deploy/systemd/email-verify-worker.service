@@ -1,0 +1,16 @@
+[Unit]
+Description=Email verification worker (MailTester Ninja)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/emails
+ExecStart=/opt/emails/venv/bin/python /opt/emails/bin/verify_worker.py
+Restart=always
+RestartSec=10
+StandardOutput=append:/opt/emails/logs/verify-worker.log
+StandardError=append:/opt/emails/logs/verify-worker.log
+
+[Install]
+WantedBy=multi-user.target

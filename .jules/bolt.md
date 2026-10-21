@@ -1,0 +1,9 @@
+## 2024-05-18 - [Bulk lookup temp table optimization]
+**Learning:** When optimizing SQLite queries for bulk operations or lookups, replacing N+1 Python-level SELECT queries with a temporary table and a JOIN is significantly faster (approx 2x-3x) and prevents SQLITE_MAX_VARIABLE_NUMBER limits. However, for simple bulk lookups, chunked IN clauses can actually outperform temporary tables (as proven by benchmarks in process_verify.py) and should not necessarily be replaced.
+**Action:** Use chunked IN clauses for simple lookups if limits might be hit, but prefer TEMP TABLE + JOIN for complex multi-table bulk operations.
+## 2024-10-20 - [Bulk insert optimization for job creation]
+**Learning:** When ingesting a large list of items into the database where each item needs to be checked against a cache, replacing the N+1 Python-level SELECT queries with a TEMP TABLE and an INSERT ... SELECT ... LEFT JOIN is significantly faster (approx 2x faster). This completely eliminates the need for loop-based SELECT queries over thousands of items.
+**Action:** Prefer TEMP TABLE + LEFT JOIN when combining bulk insertions with cache lookups, to avoid N+1 query bottlenecks in job ingestion.
+## 2026-10-21 - [Index optimization for UI speed metrics]
+**Learning:** The web application calculates live statistics (like `job_counts`, `job_timing`, and `recent_checks`) frequently using queries against the `emails` table. Without indexes on `(job_id, state, checked_at)` and `(job_id, state, code, message)`, fetching metrics for jobs containing 10,000+ items leads to significant N+1-like performance degradation (seconds per page load), as it scans the whole table. Adding these multi-column indexes reduces query time for speed measurements and job counts by up to 100x.
+**Action:** When querying large datasets for UI aggregations and live feeds (like timings and recent activity), ensure queries align precisely with multi-column database indexes.
