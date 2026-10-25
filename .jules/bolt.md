@@ -1,0 +1,4 @@
+## Memory
+* The project is a Python-based bulk email verification tool utilizing Flask for the web UI, SQLite (verify.db) for storage, and background workers.
+* When optimizing SQLite queries for bulk operations or lookups, replacing N+1 Python-level SELECT queries with a temporary table and a JOIN is significantly faster (approx 2x-3x) and prevents SQLITE_MAX_VARIABLE_NUMBER limits. However, for simple bulk lookups, chunked IN clauses can actually outperform temporary tables (as proven by benchmarks in process_verify.py) and should not necessarily be replaced.
+* SQLite temporary tables are safe to use for database optimizations in this codebase because they are connection-local, and the application uses a connection-per-request model that inherently prevents concurrency issues and race conditions.
