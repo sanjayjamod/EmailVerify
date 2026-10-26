@@ -1,0 +1,16 @@
+[Unit]
+Description=Email verification web UI (email.sanjayjamod.cloud)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/emails
+ExecStart=/opt/emails/venv/bin/python /opt/emails/bin/webapp.py 172.16.5.1 8901
+Restart=always
+RestartSec=10
+StandardOutput=append:/opt/emails/logs/verify-web.log
+StandardError=append:/opt/emails/logs/verify-web.log
+
+[Install]
+WantedBy=multi-user.target
