@@ -20,6 +20,7 @@ Design notes
     MX Error, Greylisted) and key errors are never cached.
   * A daily cap stops a runaway loop from burning the whole balance overnight.
 """
+
 import json, os, signal, sys, threading, time
 import requests
 
@@ -27,8 +28,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import store
 
 BASE = os.environ.get("EMAILS_BASE", "/opt/emails")
-CONF = BASE + "/verify.conf.json"
-KEYF = BASE + "/mailtester.key"
+CONF = f"{BASE}/verify.conf.json"
+KEYF = f"{BASE}/mailtester.key"
 API = "https://happy.mailtester.ninja/ninja"
 
 DEFAULTS = {
@@ -50,16 +51,16 @@ stop = threading.Event()
 
 
 def log(msg):
-    print("%s  %s" % (time.strftime("%Y-%m-%d %H:%M:%S"), msg), flush=True)
+    print(f'{time.strftime("%Y-%m-%d %H:%M:%S")}  {msg}', flush=True)
 
 
 def load_conf():
     conf = dict(DEFAULTS)
     if os.path.isfile(CONF):
         try:
-            conf.update(json.load(open(CONF)))
+            conf |= json.load(open(CONF))
         except Exception as e:
-            log("bad %s (%s) - using defaults" % (CONF, e))
+            log(f"bad {CONF} ({e}) - using defaults")
     return conf
 
 
@@ -124,7 +125,7 @@ def check(session, key, email, timeout):
     try:
         r = session.get(API, params={"email": email, "key": key}, timeout=timeout)
     except Exception as e:
-        return None, "request failed: %s" % e
+        return None, f"request failed: {e}"
     # Rate limiting arrives as HTTP 429 with a plain-text body, not JSON.
     if r.status_code == 429:
         return RATE_LIMITED, r.text[:200]
@@ -133,7 +134,7 @@ def check(session, key, email, timeout):
     try:
         d = r.json()
     except Exception:
-        return None, "not json: %s" % r.text[:120]
+        return None, f"not json: {r.text[:120]}"
     return (d.get("code", "") or "", d.get("message", "") or ""), ""
 
 
@@ -167,11 +168,11 @@ def worker(name, conf, key, bucket, counter):
             store.release(con, row_id)
             con.commit()
             bucket.penalise(conf.get("cooldown", 20))
-            log("%s  rate limited - all threads standing down: %s" % (name, err))
+            log(f"{name}  rate limited - all threads standing down: {err}")
             continue
 
         if result is None:
-            log("%s  %s  RETRY  %s" % (name, email, err))
+            log(f"{name}  {email}  RETRY  {err}")
             store.defer(con, row_id, conf["retry_delay"], conf["max_attempts"])
             con.commit()
             continue
@@ -186,8 +187,9 @@ def worker(name, conf, key, bucket, counter):
                 store.release(con, row_id)
                 con.commit()
                 bucket.penalise(conf.get("key_cooldown", 300))
-                log("%s  API refused the key (%s) - all threads standing down"
-                    % (name, message or code))
+                log(
+                    f"{name}  API refused the key ({message or code}) - all threads standing down"
+                )
             else:
                 log("%s  %s  RETRY  unexpected answer %r / %r" % (name, email, code, message))
                 store.defer(con, row_id, conf["retry_delay"], conf["max_attempts"])
@@ -217,15 +219,15 @@ def main():
         % (conf["rate_limit"], conf["rate_period"], conf["workers"], conf["daily_cap"]))
 
     if not key:
-        log("NO API KEY at %s - idling. Put the key there and restart." % KEYF)
+        log(f"NO API KEY at {KEYF} - idling. Put the key there and restart.")
         while not stop.is_set():
             stop.wait(30)
             key = load_key()
             if key:
                 log("key appeared - starting work")
                 break
-        if not key:
-            return
+    if not key:
+        return
 
     bucket = Bucket(conf["rate_limit"], conf["rate_period"])
     counter = {"n": 0, "lock": threading.Lock()}

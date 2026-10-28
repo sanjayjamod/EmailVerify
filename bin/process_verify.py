@@ -17,6 +17,8 @@ Writes into /opt/emails/output/<client>/<job>/:
 
 Prints the summary as JSON on the last line so a workflow can parse it.
 """
+
+
 import csv, os, sys, json, sqlite3, collections, datetime
 
 if len(sys.argv) < 3:
@@ -24,20 +26,22 @@ if len(sys.argv) < 3:
 SRC    = sys.argv[1]
 CLIENT = sys.argv[2]
 ROOT   = os.environ.get("EMAILS_BASE", "/opt/emails")
-DB     = "%s/clients/%s/contacts.db" % (ROOT, CLIENT)
-OUT    = ROOT + "/output/" + CLIENT
+DB = f"{ROOT}/clients/{CLIENT}/contacts.db"
+OUT = f"{ROOT}/output/{CLIENT}"
 
-if not os.path.isfile(SRC): sys.exit("no such file: " + SRC)
+if not os.path.isfile(SRC):
+    sys.exit(f"no such file: {SRC}")
 if not os.path.isfile(DB):
-    sys.exit("no index for client '%s' — run: build_index.py %s" % (CLIENT, CLIENT))
+    sys.exit(f"no index for client '{CLIENT}' — run: build_index.py {CLIENT}")
 
 name = os.path.basename(SRC)
 for suffix in (".csv.csv", ".csv"):
     if name.endswith(suffix): name = name[: -len(suffix)]; break
-job = OUT + "/" + name
-up  = job + "/1 - UPLOAD to MailWizz"
-rest= job + "/2 - not used (baad ke liye)"
-os.makedirs(up, exist_ok=True); os.makedirs(rest, exist_ok=True)
+job = f"{OUT}/{name}"
+up = f"{job}/1 - UPLOAD to MailWizz"
+rest = f"{job}/2 - not used (baad ke liye)"
+os.makedirs(up, exist_ok=True)
+os.makedirs(rest, exist_ok=True)
 
 COLS = ["EMAIL","GREETING","FNAME","FIRSTNAME","LASTNAME","COMPANY","POSITION",
         "CITY","COUNTRY","COMPANYCOUNTRY","INDUSTRY","HAS_NAME","SOURCE"]
@@ -73,7 +77,7 @@ for e in accepted:
     fn = (d.get("FNAME") or "").strip()
     rows.append({
         "EMAIL": e,
-        "GREETING": fn if fn else "there",
+        "GREETING": fn or "there",
         "FNAME": fn,
         "FIRSTNAME": d.get("FIRSTNAME",""), "LASTNAME": d.get("LASTNAME",""),
         "COMPANY": d.get("COMPANY",""),     "POSITION": d.get("POSITION",""),
@@ -105,7 +109,7 @@ for b, items in buckets.items():
     with open(f"{rest}/{b} ({len(items)}).csv", "w", newline="", encoding="utf-8-sig") as fh:
         w = csv.writer(fh); w.writerow(["EMAIL","VERIFY_STATUS"]); w.writerows(sorted(set(items)))
 
-named   = sum(1 for r in rows if r["HAS_NAME"] == "yes")
+named = sum(r["HAS_NAME"] == "yes" for r in rows)
 checked = len(seen)
 by_src  = collections.Counter(r["SOURCE"] for r in rows)
 
