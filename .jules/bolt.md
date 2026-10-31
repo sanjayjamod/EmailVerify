@@ -1,0 +1,3 @@
+## 2023-11-01 - [Add index on emails table for recent checks]
+**Learning:** Functions like `recent_span`, `job_timing`, and `recent_checks` use an `ORDER BY checked_at DESC, id DESC LIMIT n` query over `emails` filtered by `job_id` and `state='done'`. These caused full table scans and temporary B-Tree sorts on large tables. Adding a compound index `(job_id, state, checked_at DESC, id DESC)` turns these into near-instant index scans.
+**Action:** Always identify queries involving filtering + ordering + limiting over large SQLite tables and ensure a matching compound index exists covering all conditions and sorting columns in order.
